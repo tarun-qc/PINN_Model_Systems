@@ -281,12 +281,12 @@ pinn.train(n_epochs=10000)
 
 ## License
 
-MIT License - Free for research and educational use.
+BSD3 License - Don't worry, Feel Free to use for research and educational use.
 
 ---
 
 ## Author
-
+Many People, Many factors, I am grateful to effort of everyone who made learning this possible. 
 Implementations adapted for quantum chemistry and computational physics applications.
 
 *Last updated: June 2026*
