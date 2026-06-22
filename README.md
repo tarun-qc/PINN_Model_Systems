@@ -7,7 +7,14 @@ This repository contains Python implementations of **Physics-Informed Neural Net
 1. **Simple Pendulum** - A nonlinear Ordinary Differential Equation (ODE)
 2. **1D Heat Equation** - A partial Differential Equation (PDE)
 
-PINNs are a class of deep learning methods that embed physical laws (expressed as differential equations) directly into the neural network's loss function. This enables solving differential equations **without any training data** — the network learns purely from the physics itself [web:12].
+PINNs are a class of deep learning methods that embed physical laws (expressed as differential equations) directly into the neural network's loss function. This enables solving differential equations **without any training data** — the network learns purely from the physics itself [web:y].
+
+Additional Python implementations of **Fourier Embedding Physics-Informed Neural Networks (FPINNs)** for solving the spring-mass model systems in physics:
+
+3. **Simple Pendulum** - A a second-order linear Ordinary Differential Equation (ODE)
+
+The model learns the displacement \(x(t)\) directly from the governing physics, without requiring labeled solution data during training. Fourier features are used to improve the network's ability to represent oscillatory motion more accurately [web:x][web:x+3].
+
 
 ---
 
@@ -23,10 +30,10 @@ $$\text{Loss} = \text{PDE Loss} + \text{Boundary Condition Loss} + \text{Initial
 
 | Advantage | Description |
 |-----------|-------------|
-| **Data-free** | Solve PDEs/ODEs without experimental data [web:12] |
-| **Differentiable** | All outputs are analytical functions (gradients available) [web:12] |
-| **Flexible** | Work in high dimensions, complex geometries [web:12] |
-| **Forward & Inverse** | Can solve for solutions OR discover unknown parameters [web:12] |
+| **Data-free** | Solve PDEs/ODEs without experimental data [web:y] |
+| **Differentiable** | All outputs are analytical functions (gradients available) [web:y] |
+| **Flexible** | Work in high dimensions, complex geometries [web:y] |
+| **Forward & Inverse** | Can solve for solutions OR discover unknown parameters [web:y] |
 
 ---
 
@@ -150,6 +157,219 @@ python pinn_heat_equation.py
 
 ---
 
+## Problem 3: Spring Mass System
+
+### Physical System
+
+A spring-mass system is a standard example of simple harmonic motion.  
+If a mass \(m\) is attached to a spring with stiffness \(k\), the displacement \(x(t)\) from equilibrium satisfies a second-order linear ODE.
+
+![Spring Mass Schema](figs/spring_mass_schema.png)
+
+### Governing Equation
+
+The second-order linear ODE:
+
+\[
+x''(t) + \omega^2 x(t) = 0
+\]
+
+where:
+
+\[
+\omega^2 = \frac{k}{m}
+\]
+This equation describes undamped periodic motion. The motion repeats with angular frequency \(\omega\), and the analytical solution is sinusoidal [web:x-1][web:x+2][web:x+5]
+
+## Equation Parameters
+
+The model uses the following physical parameters:
+
+- **\(x(t)\)**: displacement of the mass from equilibrium at time \(t\).
+- **\(t\)**: time variable.
+- **\(m\)**: mass attached to the spring, in kilograms.
+- **\(k\)**: spring constant, in newtons per meter.
+- **\(\omega\)**: angular frequency, defined as \(\omega = \sqrt{k/m}\).
+- **\(x_0\)**: initial displacement, i.e. \(x(0)\).
+- **\(v_0\)**: initial velocity, i.e. \(x'(0)\).
+
+For this example:
+
+- \(m = 1.0\) kg
+- \(k = 2.5\) N/m
+- \(x_0 = 1.0\) m
+- \(v_0 = 0.0\) m/s
+
+The analytical solution for these initial conditions is:
+
+\[
+x(t) = x_0 \cos(\omega t) + \frac{v_0}{\omega}\sin(\omega t)
+\]
+Since \(v_0 = 0\), this simplifies to:
+
+\[
+x(t) = x_0 \cos(\omega t)
+\]
+### PINN Implementation
+
+A Physics-Informed Neural Network solves the ODE by minimizing a loss function that combines:
+
+1. **Physics residual loss**, which forces the network output to satisfy the differential equation.
+2. **Initial condition loss**, which forces the solution to match the known starting values.
+
+For this spring-mass system, the residual is:
+
+\[
+r(t) = \frac{d^2x}{dt^2} + \frac{k}{m}x
+\]
+
+The physics loss is the mean squared residual:
+
+\[
+L_{\mathrm{physics}} = \frac{1}{N}\sum_{i=1}^{N} r(t_i)^2
+\]
+
+The initial condition loss is:
+
+\[
+L_{\mathrm{IC}} = (x(0) - x_0)^2 + (x'(0) - v_0)^2
+\]
+
+The total training loss is:
+
+\[
+L = L_{\mathrm{physics}} + 10 \cdot L_{\mathrm{IC}}
+\]
+
+The weighting factor on the initial condition term helps the model satisfy the starting conditions more strongly [web:x+1][web:x+5].
+## Why Fourier Features
+
+Standard neural networks can struggle with oscillatory functions because of spectral bias, meaning they tend to learn low-frequency patterns first. Fourier feature embedding helps by mapping the time input into a higher-dimensional sinusoidal feature space before the main neural network processes it [web:x][web:x+3].
+
+This improves the network’s ability to represent periodic behavior such as:
+
+- spring oscillations,
+- pendulum motion,
+- wave-like solutions,
+- other frequency-rich dynamics.
+
+In this implementation, the input time \(t\) is transformed using random Fourier features:
+
+\[
+\phi(t) = [\sin(2\pi tB), \cos(2\pi tB)]
+\]
+
+where \(B\) is a fixed random projection matrix.
+
+---
+
+## Code Structure
+
+### `FourierFeatures`
+
+This class converts scalar time input into a sinusoidal embedding.  
+It expands the input from 1 dimension to `2 * mapping_size` dimensions using sine and cosine transforms.
+
+Purpose:
+- improve representation of periodic functions,
+- reduce spectral bias,
+- make learning oscillatory motion easier.
+
+### `FourierPINN`
+
+This is the fully connected neural network that takes the Fourier-encoded input and predicts displacement \(x(t)\).
+
+It uses:
+- linear layers,
+- `tanh` activation,
+- Xavier initialization.
+
+Purpose:
+- approximate the unknown solution function \(x(t)\).
+
+### `SpringMassFourierPINN`
+
+This class manages the full PINN workflow.
+
+It contains:
+- the physical parameters \(m\) and \(k\),
+- the Fourier feature encoder,
+- the neural network,
+- the optimizer,
+- the loss functions,
+- the training loop,
+- prediction utilities.
+
+### `physics_loss(t)`
+
+Computes the ODE residual by:
+1. predicting \(x(t)\),
+2. computing first derivative \(x'(t)\),
+3. computing second derivative \(x''(t)\),
+4. evaluating the residual \(x''(t) + (k/m)x(t)\).
+
+### `ic_loss(x0, v0)`
+
+Computes the initial condition mismatch at \(t=0\).
+
+It enforces:
+- \(x(0) = x_0\),
+- \(x'(0) = v_0\).
+
+### `train(...)`
+
+Trains the model using Adam optimization.
+
+Training uses:
+- collocation points in the time domain,
+- physics loss,
+- initial condition loss.
+
+The network learns a function that satisfies the governing ODE rather than fitting labeled data.
+
+### `predict(t)`
+
+Evaluates the trained model at a set of time values and returns the displacement prediction.
+
+### `analytical_solution(...)`
+
+Computes the exact closed-form solution of the spring-mass system for comparison
+
+### Results
+
+The result is generated in four stages:
+
+1. **Generate collocation points** in the time interval \([0, 10]\).
+2. **Evaluate the PINN residual** using automatic differentiation to compute \(x'(t)\) and \(x''(t)\).
+3. **Optimize the neural network** so that both the ODE residual and the initial conditions are satisfied.
+4. **Compare the learned solution** against the analytical spring-mass solution.
+
+After training, the code:
+- predicts \(x(t)\) on a test time grid,
+- computes the absolute error,
+- plots the analytical and PINN solutions,
+- saves the figure as `fourier_pinn_spring_mass.png`,
+- saves the trained model as `fourier_pinn_spring_mass.pth`.
+
+### Usage
+
+```bash
+python fourier_pinn_spring_mass.py
+```
+During training, the script prints:
+- total loss,
+- physics loss,
+- initial condition loss.
+
+After training, it displays and saves the solution plot.
+
+**Output files:**
+After running the script, the following files are created:
+
+- `fourier_pinn_spring_mass.png`: comparison plot of analytical vs PINN solution and error.
+- `fourier_pinn_spring_mass.pth`: saved PyTorch model weights.
+---
+
 ## Neural Network Architecture
 
 Both implementations use the same fully-connected architecture:
@@ -271,11 +491,14 @@ pinn.train(n_epochs=10000)
 
 ## References
 
-1. **Raissi, M., Perdikas, P., & Karniadakis, G. E. (2019).** "Physics-informed deep learning (part I): Data-driven solutions of nonlinear partial differential equations." *arXiv preprint arXiv:1711.10561*. [web:12]
+1. **Raissi, M., Perdikas, P., & Karniadakis, G. E. (2019).** "Physics-informed deep learning (part I): Data-driven solutions of nonlinear partial differential equations." *arXiv preprint arXiv:1711.10561*. [web:y]
 
-2. **DeepXDE Library** - Comprehensive PINN implementation for various PDEs [web:15]
+2. **DeepXDE Library** - Comprehensive PINN implementation for various PDEs [web:y+3]
 
-3. **PINN Tutorial (PyTorch)** - Minimal implementation examples [web:18]
+3. **PINN Tutorial (PyTorch)** - Minimal implementation examples [web:y+6]
+4. **Spring-Mass System** - Classical spring-mass motion and angular frequency relations [web:x-1][web:x+2][web:x+5].
+5. **Mass-Spring-Damper Model** - PINN loss construction and physics residual formulation [web:x+1][web:x+6][web:x+7].
+6. **PINN/Foruier Feature References** - Fourier feature embedding for improved oscillatory learning [web:x][web:x+3].
 
 ---
 
